@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Preparador de Envíos Crea+</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <div class="hero__content">
+      <span class="eyebrow">Crea+ · Herramienta local</span>
+      <h1>Preparador de Envíos Crea+</h1>
+      <p>Valida bases, divide destinatarios en bloques Excel y descarga un ZIP listo para usar en Power Automate. Nada se sube a internet.</p>
+      <div class="privacy-pill">🔒 Procesamiento 100% en tu navegador · No envía correos</div>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <section class="notice">
+      <strong>Importante:</strong> esta web solo prepara archivos. No usa credenciales, Microsoft Graph, backend ni Power Automate directamente.
+    </section>
+
+    <form id="campaignForm" class="grid" autocomplete="off">
+      <article class="card step-card">
+        <div class="step-number">1</div>
+        <div>
+          <h2>Campaña y base</h2>
+          <label for="campaignName">Nombre de campaña</label>
+          <input id="campaignName" type="text" placeholder="Ej. Convocatoria voluntarios junio" required />
+
+          <label for="excelFile">Excel grande de destinatarios</label>
+          <input id="excelFile" type="file" accept=".xlsx,.xls,.csv" required />
+          <p class="help">Formatos aceptados: .xlsx, .xls o .csv. El archivo se lee localmente.</p>
+
+          <div id="sheetChooser" class="hidden">
+            <label for="sheetName">Hoja del Excel</label>
+            <select id="sheetName"></select>
+          </div>
+        </div>
+      </article>
+
+      <article class="card step-card">
+        <div class="step-number">2</div>
+        <div>
+          <h2>Mapeo de columnas</h2>
+          <p class="help">Elige qué columna corresponde a cada dato. Solo correo y nombre son obligatorios.</p>
+          <div id="mappingGrid" class="mapping-grid"></div>
+        </div>
+      </article>
+
+      <article class="card step-card full-width">
+        <div class="step-number">3</div>
+        <div>
+          <h2>Contenido del correo</h2>
+          <div class="two-columns">
+            <div>
+              <label for="subject">Asunto</label>
+              <input id="subject" type="text" placeholder="Ej. Invitación Crea+" required />
+            </div>
+            <div>
+              <label for="blockSize">Tamaño de bloque</label>
+              <input id="blockSize" type="number" min="1" max="5000" value="250" required />
+            </div>
+          </div>
+          <label for="messageHtml">Mensaje o plantilla HTML</label>
+          <textarea id="messageHtml" rows="10" placeholder="Escribe aquí el HTML o mensaje que leerá Power Automate..." required></textarea>
+          <div class="actions">
+            <button type="button" id="validateBtn" class="button button--secondary">Validar base</button>
+            <button type="button" id="downloadBtn" class="button" disabled>Generar y descargar ZIP</button>
+          </div>
+        </div>
+      </article>
+    </form>
+
+    <section class="card summary-card" aria-live="polite">
+      <h2>Resumen de validación</h2>
+      <div id="summaryGrid" class="summary-grid">
+        <div><strong>0</strong><span>Total de filas</span></div>
+        <div><strong>0</strong><span>Correos válidos</span></div>
+        <div><strong>0</strong><span>Correos inválidos</span></div>
+        <div><strong>0</strong><span>Duplicados</span></div>
+        <div><strong>0</strong><span>Filas sin correo</span></div>
+        <div><strong>0</strong><span>Bloques</span></div>
+      </div>
+      <div id="statusMessage" class="status">Sube un Excel para comenzar.</div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
