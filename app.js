@@ -122,6 +122,10 @@ function updateSummary(summary) {
 }
 
 async function excelTableBlob(sheetName, tableName, columns, rows, options = {}) {
+  if (!window.ExcelJS) {
+    throw new Error('No se pudo cargar ExcelJS. Revisa tu conexión a internet e intenta nuevamente.');
+  }
+
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Preparador de Envíos Crea+';
   workbook.created = new Date();
@@ -130,7 +134,7 @@ async function excelTableBlob(sheetName, tableName, columns, rows, options = {})
     views: [{ state: 'frozen', ySplit: 1 }]
   });
 
-  worksheet.addTable({
+  const table = worksheet.addTable({
     name: tableName,
     displayName: tableName,
     ref: 'A1',
@@ -143,6 +147,7 @@ async function excelTableBlob(sheetName, tableName, columns, rows, options = {})
     columns: columns.map((column) => ({ name: column, filterButton: true })),
     rows
   });
+  table.commit();
 
   worksheet.columns.forEach((column, index) => {
     const header = columns[index];
