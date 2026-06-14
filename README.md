@@ -41,6 +41,9 @@ Abre `index.html` en el navegador o publícalo como sitio estático, por ejemplo
 
 Cada `bloque_XXX.xlsx` contiene una hoja llamada `Envios` y una tabla llamada `TablaEnvios` con estas columnas:
 
+> Nota: Los archivos `bloque_XXX.xlsx` incluyen una tabla real llamada `TablaEnvios` para que Power Automate pueda leerlos con **List rows present in a table**.
+
+
 - `id_envio`
 - `id_campaña`
 - `nombre_campaña`

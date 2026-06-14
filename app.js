@@ -121,56 +121,65 @@ function updateSummary(summary) {
   els.summaryGrid.querySelectorAll('strong').forEach((node, index) => { node.textContent = values[index] || 0; });
 }
 
-function aoaToWorkbook(sheetName, rows, tableName) {
-  const worksheet = XLSX.utils.aoa_to_sheet(rows);
-  const range = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(rows.length - 1, 0), c: rows[0].length - 1 } });
-  worksheet['!autofilter'] = { ref: range };
-  worksheet['!cols'] = rows[0].map(() => ({ wch: 22 }));
-  if (tableName) worksheet['!tables'] = [{ name: tableName, ref: range, headerRow: true, totalsRow: false }];
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-  return workbook;
-}
+async function excelTableBlob(sheetName, tableName, columns, rows, options = {}) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Preparador de Envíos Crea+';
+  workbook.created = new Date();
 
-function workbookToBlob(workbook) {
-  const array = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', cellStyles: true });
-  return new Blob([array], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-}
+  const worksheet = workbook.addWorksheet(sheetName, {
+    views: [{ state: 'frozen', ySplit: 1 }]
+  });
 
-async function workbookToTableBlob(workbook, tableName, rowCount, columnCount) {
-  const blob = workbookToBlob(workbook);
-  const zip = await JSZip.loadAsync(blob);
-  const tableRef = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(rowCount - 1, 0), c: columnCount - 1 } });
-  const headers = requiredBlockColumns.map((name, index) => `<tableColumn id="${index + 1}" name="${name}"/>`).join('');
-  zip.file('xl/tables/table1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="1" name="${tableName}" displayName="${tableName}" ref="${tableRef}" totalsRowShown="0"><autoFilter ref="${tableRef}"/><tableColumns count="${columnCount}">${headers}</tableColumns><tableStyleInfo name="TableStyleMedium2" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>`);
+  worksheet.addTable({
+    name: tableName,
+    displayName: tableName,
+    ref: 'A1',
+    headerRow: true,
+    totalsRow: false,
+    style: {
+      theme: options.theme || 'TableStyleMedium2',
+      showRowStripes: true
+    },
+    columns: columns.map((column) => ({ name: column, filterButton: true })),
+    rows
+  });
 
-  const contentTypes = await zip.file('[Content_Types].xml').async('string');
-  if (!contentTypes.includes('/xl/tables/table1.xml')) {
-    zip.file('[Content_Types].xml', contentTypes.replace('</Types>', '<Override PartName="/xl/tables/table1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/></Types>'));
-  }
+  worksheet.columns.forEach((column, index) => {
+    const header = columns[index];
+    const widthByHeader = {
+      mensaje_html: 48,
+      observacion: 34,
+      asunto: 32,
+      nombre_campaña: 28,
+      id_envio: 32,
+      correo: 30,
+      nombre: 28
+    };
+    column.width = widthByHeader[header] || 20;
+  });
 
-  const relPath = 'xl/worksheets/_rels/sheet1.xml.rels';
-  const relXml = zip.file(relPath)
-    ? await zip.file(relPath).async('string')
-    : '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
-  const tableRelId = relXml.includes('Id="rId1"') ? 'rIdTable1' : 'rId1';
-  if (!relXml.includes('../tables/table1.xml')) {
-    zip.file(relPath, relXml.replace('</Relationships>', `<Relationship Id="${tableRelId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>`));
-  }
+  worksheet.getRow(1).eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: options.headerColor || 'FFFF6B35' } };
+    cell.alignment = { vertical: 'middle', wrapText: true };
+  });
 
-  const sheetXml = await zip.file('xl/worksheets/sheet1.xml').async('string');
-  if (!sheetXml.includes('<tableParts')) {
-    zip.file('xl/worksheets/sheet1.xml', sheetXml.replace('</worksheet>', `<tableParts count="1"><tablePart r:id="${tableRelId}"/></tableParts></worksheet>`));
-  }
-  return await zip.generateAsync({ type: 'blob' });
+  worksheet.eachRow((row) => {
+    row.eachCell((cell) => {
+      cell.alignment = { vertical: 'top', wrapText: cell.col === columns.indexOf('mensaje_html') + 1 };
+    });
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
 function buildBlockRows(records, blockNumber) {
-  return [requiredBlockColumns, ...records.map((record, index) => [
+  return records.map((record, index) => [
     `${state.validation.campaignId}-${padBlock(blockNumber)}-${String(index + 1).padStart(4, '0')}`,
     state.validation.campaignId, state.validation.campaignName, blockNumber, record.correo, record.nombre,
     state.validation.subject, state.validation.messageHtml, 'PENDIENTE', '', '', 'NO', '', '', 'SIN ENVIAR', ''
-  ])];
+  ]);
 }
 
 async function generateZip() {
@@ -179,12 +188,14 @@ async function generateZip() {
   const { valid, errors, blockSize, summary, campaignName } = state.validation;
   for (let start = 0, block = 1; start < valid.length; start += blockSize, block += 1) {
     const rows = buildBlockRows(valid.slice(start, start + blockSize), block);
-    zip.file(`bloque_${padBlock(block)}.xlsx`, await workbookToTableBlob(aoaToWorkbook('Envios', rows), 'TablaEnvios', rows.length, requiredBlockColumns.length));
+    zip.file(`bloque_${padBlock(block)}.xlsx`, await excelTableBlob('Envios', 'TablaEnvios', requiredBlockColumns, rows));
   }
-  const errorRows = [['fila_origen', 'correo', 'nombre', ...optionalFields, 'observacion'], ...errors.map((r) => ['fila_origen', 'correo', 'nombre', ...optionalFields, 'observacion'].map((key) => r[key] || ''))];
-  zip.file('reporte_errores.xlsx', workbookToBlob(aoaToWorkbook('Errores', errorRows)));
-  const resumenRows = [['campo', 'valor'], ['nombre_campaña', campaignName], ['fecha_generacion', new Date().toISOString()], ['total_filas', summary.totalRows], ['validos', summary.validCount], ['errores', errors.length], ['duplicados', summary.duplicateCount], ['bloques_generados', summary.blockCount], ['tamaño_bloque', blockSize]];
-  zip.file('resumen_campaña.xlsx', workbookToBlob(aoaToWorkbook('Resumen', resumenRows)));
+  const errorColumns = ['fila_origen', 'correo', 'nombre', ...optionalFields, 'observacion'];
+  const errorRows = errors.map((row) => errorColumns.map((key) => row[key] || ''));
+  zip.file('reporte_errores.xlsx', await excelTableBlob('Errores', 'TablaErrores', errorColumns, errorRows, { theme: 'TableStyleMedium3', headerColor: 'FFB42318' }));
+  const resumenColumns = ['campo', 'valor'];
+  const resumenRows = [['nombre_campaña', campaignName], ['fecha_generacion', new Date().toISOString()], ['total_filas', summary.totalRows], ['validos', summary.validCount], ['errores', errors.length], ['duplicados', summary.duplicateCount], ['bloques_generados', summary.blockCount], ['tamaño_bloque', blockSize]];
+  zip.file('resumen_campaña.xlsx', await excelTableBlob('Resumen', 'TablaResumen', resumenColumns, resumenRows, { theme: 'TableStyleMedium4', headerColor: 'FF0F766E' }));
   zip.file('plantilla_correo.html', state.validation.messageHtml);
   const blob = await zip.generateAsync({ type: 'blob' });
   saveAs(blob, `${safeFileName(campaignName)}_power_automate.zip`);
